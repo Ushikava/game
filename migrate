@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/src"
+
+alembic() {
+    uv run --quiet alembic "$@"
+}
+
+usage() {
+    cat <<'TEXT'
+Использование: ./migrate <команда>
+
+  create "описание"   создать миграцию по изменениям в моделях
+  up                  применить все новые миграции
+  down                откатить последнюю миграцию
+  status              текущая версия базы и список миграций
+  check               совпадают ли модели с базой
+TEXT
+}
+
+create() {
+    local message="${1:-}"
+    if [[ -z "$message" ]]; then
+        echo "Укажите описание: ./migrate create \"add user money\"" >&2
+        exit 1
+    fi
+
+    local check_output
+    if check_output=$(alembic check 2>&1); then
+        echo "Модели совпадают с базой — миграция не нужна."
+        return
+    fi
+    if ! grep -q "New upgrade operations detected" <<<"$check_output"; then
+        echo "$check_output" >&2
+        exit 1
+    fi
+
+    local output file
+    output=$(alembic revision --autogenerate -m "$message" 2>&1)
+    file=$(grep -oP 'Generating \K\S+\.py' <<<"$output")
+
+    echo "Найдены изменения:"
+    grep "Detected" <<<"$output" | grep -v "Detected sequence" | sed -E 's/^INFO +\[[^]]*\] /  /'
+    echo
+    echo "Создан файл: src/${file#"$PWD"/}"
+
+    if grep -q "op\.drop_" "$file"; then
+        echo
+        echo "ВНИМАНИЕ: миграция что-то удаляет (drop_). Если это переименование —"
+        echo "замените drop + add на op.alter_column(..., new_column_name=...), иначе данные пропадут."
+    fi
+
+    echo
+    echo "Прочитайте файл, затем примените: ./migrate up"
+}
+
+case "${1:-}" in
+    create) shift; create "$@" ;;
+    up) alembic upgrade head ;;
+    down) alembic downgrade -1 ;;
+    status) alembic current && echo && alembic history ;;
+    check) alembic check ;;
+    *) usage; exit 1 ;;
+esac

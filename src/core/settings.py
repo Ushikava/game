@@ -1,13 +1,20 @@
-import os
-from os.path import dirname, join
+from pathlib import Path
+from typing import Literal
 
-from dotenv import load_dotenv
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-dotenv_path = join(dirname(dirname(__file__)), '.env')
-load_dotenv(dotenv_path)
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
-ALGORITHM = "HS256"
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-SECRET_KEY = os.environ.get("SECRET_KEY", "mysecretkey")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
+
+    database_url: str
+    secret_key: str = Field(min_length=32)
+    algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
+    access_token_expire_minutes: int = Field(default=15, gt=0)
+    refresh_token_expire_days: int = Field(default=30, gt=0)
+
+
+settings = Settings()
