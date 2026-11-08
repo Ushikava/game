@@ -1,8 +1,10 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from models.users import NewPassword, Password, Username
+
+RefreshTokenValue = Annotated[str, Field(min_length=1, max_length=64)]
 
 
 class RegisterRequest(BaseModel):
@@ -11,12 +13,12 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
+    username: Annotated[str, Field(min_length=1, max_length=32, examples=["username"])]
     password: Password
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: RefreshTokenValue
 
 
 class TokenPair(BaseModel):

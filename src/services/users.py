@@ -6,13 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.exceptions import ConflictError, ForbiddenError
 from core.security import hash_password, verify_password
 from db.models import User
+from infrastructure.connection_manager import ConnectionManager
+from models.game import CloseCode
 from repositories.refresh_tokens import RefreshTokenRepository
 from repositories.users import UserRepository
 
 
 class UserService:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, connections: ConnectionManager):
         self.session = session
+        self.connections = connections
         self.users = UserRepository(session)
         self.refresh_tokens = RefreshTokenRepository(session)
 
@@ -34,11 +37,14 @@ class UserService:
         user.hashed_password = await hash_password(new_password)
         await self.refresh_tokens.delete_all_for_user(user.id)
         await self.session.commit()
+        await self.connections.kick(user.id, CloseCode.SESSION_REVOKED, "Пароль изменён")
 
     async def delete_account(self, user: User, password: str) -> None:
         await self._ensure_password(user, password)
+        user_id = user.id
         await self.users.delete(user)
         await self.session.commit()
+        await self.connections.kick(user_id, CloseCode.SESSION_REVOKED, "Аккаунт удалён")
 
     async def _ensure_password(self, user: User, password: str) -> None:
         is_valid, _ = await verify_password(password, user.hashed_password)

@@ -1,25 +1,107 @@
+import asyncio
+from collections.abc import Callable
+from contextlib import suppress
+from typing import Any
+
 from fastapi import WebSocket
+
+from models.game import CloseCode, PlayerInfo
+
+OUTBOX_LIMIT = 256
+SEND_TIMEOUT_SECONDS = 5.0
+CLOSE_TIMEOUT_SECONDS = 2.0
+
+
+class Connection:
+    def __init__(self, player: PlayerInfo, websocket: WebSocket, on_failure: Callable[["Connection"], None]) -> None:
+        self.player = player
+        self.websocket = websocket
+        self.closed = False
+        self._failed = False
+        self._on_failure = on_failure
+        self._outbox: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=OUTBOX_LIMIT)
+        self._sender = asyncio.create_task(self._send_loop())
+
+    def push(self, message: dict[str, Any]) -> None:
+        if self.closed or self._failed:
+            return
+        try:
+            self._outbox.put_nowait(message)
+        except asyncio.QueueFull:
+            self._fail()
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self._sender.cancel()
+        try:
+            await self._sender
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                raise
+        with suppress(Exception):
+            await asyncio.wait_for(self.websocket.close(code, reason), CLOSE_TIMEOUT_SECONDS)
+
+    async def _send_loop(self) -> None:
+        try:
+            while True:
+                message = await self._outbox.get()
+                await asyncio.wait_for(self.websocket.send_json(message), SEND_TIMEOUT_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self._fail()
+
+    def _fail(self) -> None:
+        if self._failed:
+            return
+        self._failed = True
+        self._on_failure(self)
 
 
 class ConnectionManager:
-    """Хранит открытые WebSocket-соединения: имя игрока → соединение."""
+    def __init__(self) -> None:
+        self._connections: dict[int, Connection] = {}
+        self._tasks: set[asyncio.Task[None]] = set()
 
-    def __init__(self):
-        self.connections: dict[str, WebSocket] = {}
+    async def connect(self, player: PlayerInfo, websocket: WebSocket) -> tuple[Connection, bool]:
+        connection = Connection(player, websocket, self._on_failure)
+        previous = self._connections.get(player.id)
+        self._connections[player.id] = connection
+        if previous is not None:
+            await previous.close(CloseCode.REPLACED, "Вход с другого устройства")
+        return connection, previous is not None
 
-    async def connect(self, name: str, websocket: WebSocket):
-        await websocket.accept()
-        self.connections[name] = websocket
+    async def disconnect(self, connection: Connection) -> None:
+        self._forget(connection)
+        await connection.close()
 
-    def disconnect(self, name: str):
-        self.connections.pop(name, None)
+    async def kick(self, user_id: int, code: int, reason: str) -> None:
+        connection = self._connections.get(user_id)
+        if connection is None:
+            return
+        self._forget(connection)
+        await connection.close(code, reason)
 
-    async def send_to(self, name: str, message: dict):
-        ws = self.connections.get(name)
-        if ws:
-            await ws.send_json(message)
+    def online(self) -> list[dict[str, Any]]:
+        return [connection.player.model_dump() for connection in self._connections.values()]
 
-    async def broadcast(self, message: dict, exclude: str | None = None):
-        for name, ws in list(self.connections.items()):
-            if name != exclude:
-                await ws.send_json(message)
+    def broadcast(self, message: dict[str, Any], exclude: int | None = None) -> None:
+        for user_id, connection in list(self._connections.items()):
+            if user_id != exclude:
+                connection.push(message)
+
+    def _on_failure(self, connection: Connection) -> None:
+        self._forget(connection)
+        task = asyncio.create_task(connection.close(CloseCode.TRY_AGAIN_LATER, "Соединение не успевает"))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    def _forget(self, connection: Connection) -> None:
+        player = connection.player
+        if self._connections.get(player.id) is not connection:
+            return
+        del self._connections[player.id]
+        self.broadcast({"type": "player_left", "player": player.model_dump()})

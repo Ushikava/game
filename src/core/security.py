@@ -1,24 +1,41 @@
+import asyncio
 import hashlib
 import secrets
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jwt
 from fastapi.concurrency import run_in_threadpool
 from pwdlib import PasswordHash
 
-from core.exceptions import UnauthorizedError
+from core.exceptions import ServiceUnavailableError, UnauthorizedError
 from core.settings import settings
 
 password_hasher = PasswordHash.recommended()
 DUMMY_PASSWORD_HASH = password_hasher.hash(secrets.token_urlsafe(16))
 
+_hash_slots = asyncio.Semaphore(settings.password_hash_concurrency)
+
+
+async def _run_hashing[T](func: Callable[..., T], *args: Any) -> T:
+    try:
+        async with asyncio.timeout(settings.password_hash_wait_seconds):
+            await _hash_slots.acquire()
+    except TimeoutError as exc:
+        raise ServiceUnavailableError() from exc
+    try:
+        return await run_in_threadpool(func, *args)
+    finally:
+        _hash_slots.release()
+
 
 async def hash_password(password: str) -> str:
-    return await run_in_threadpool(password_hasher.hash, password)
+    return await _run_hashing(password_hasher.hash, password)
 
 
 async def verify_password(password: str, password_hash: str) -> tuple[bool, str | None]:
-    return await run_in_threadpool(password_hasher.verify_and_update, password, password_hash)
+    return await _run_hashing(password_hasher.verify_and_update, password, password_hash)
 
 
 def create_access_token(user_id: int) -> str:

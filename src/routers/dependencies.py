@@ -1,12 +1,14 @@
 from typing import Annotated
 
 from fastapi import Depends
+from fastapi.requests import HTTPConnection
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import UnauthorizedError
 from db.models import User
 from db.session import get_db
+from infrastructure.connection_manager import ConnectionManager
 from services.auth import AuthService
 from services.users import UserService
 
@@ -16,12 +18,19 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 BearerCredentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]
 
 
+def get_connection_manager(connection: HTTPConnection) -> ConnectionManager:
+    return connection.app.state.connections
+
+
+ConnectionManagerDep = Annotated[ConnectionManager, Depends(get_connection_manager)]
+
+
 def get_auth_service(session: DbSession) -> AuthService:
     return AuthService(session)
 
 
-def get_user_service(session: DbSession) -> UserService:
-    return UserService(session)
+def get_user_service(session: DbSession, connections: ConnectionManagerDep) -> UserService:
+    return UserService(session, connections)
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

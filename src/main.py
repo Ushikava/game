@@ -5,8 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.exceptions import AppError, app_error_handler
+from core.middleware import BodySizeLimitMiddleware
 from db.session import engine
+from infrastructure.connection_manager import ConnectionManager
 from routers import auth, game, users
+
+MAX_REQUEST_BODY_BYTES = 64 * 1024
 
 
 @asynccontextmanager
@@ -16,7 +20,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Godot/FastAPI game API", lifespan=lifespan)
+app.state.connections = ConnectionManager()
 
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=MAX_REQUEST_BODY_BYTES)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

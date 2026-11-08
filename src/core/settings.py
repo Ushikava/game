@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     access_token_expire_minutes: int = Field(default=15, gt=0)
     refresh_token_expire_days: int = Field(default=30, gt=0)
+    password_hash_concurrency: int = Field(default=2, gt=0)
+    password_hash_wait_seconds: float = Field(default=10, gt=0)
 
 
 settings = Settings()

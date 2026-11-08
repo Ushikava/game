@@ -42,6 +42,11 @@ class ConflictError(AppError):
     default_detail = "Конфликт данных"
 
 
+class ServiceUnavailableError(AppError):
+    status_code = 503
+    default_detail = "Сервер перегружен, попробуйте позже"
+
+
 async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, AppError)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
