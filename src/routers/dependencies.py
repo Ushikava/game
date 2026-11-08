@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.requests import HTTPConnection
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,18 @@ def get_connection_manager(connection: HTTPConnection) -> ConnectionManager:
 
 
 ConnectionManagerDep = Annotated[ConnectionManager, Depends(get_connection_manager)]
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def limit_login(request: Request) -> None:
+    request.app.state.login_limiter.hit(_client_ip(request))
+
+
+def limit_register(request: Request) -> None:
+    request.app.state.register_limiter.hit(_client_ip(request))
 
 
 def get_auth_service(session: DbSession) -> AuthService:

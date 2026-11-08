@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +6,7 @@ from core.security import hash_password, verify_password
 from db.models import User
 from infrastructure.connection_manager import ConnectionManager
 from models.game import CloseCode
+from models.users import UserPage
 from repositories.refresh_tokens import RefreshTokenRepository
 from repositories.users import UserRepository
 
@@ -19,8 +18,15 @@ class UserService:
         self.users = UserRepository(session)
         self.refresh_tokens = RefreshTokenRepository(session)
 
-    async def get_users(self) -> Sequence[User]:
-        return await self.users.get_all()
+    async def get_users(self, after: int | None, limit: int) -> UserPage:
+        users = await self.users.get_page(after=after, limit=limit + 1)
+        has_more: bool = len(users) > limit
+        users = users[:limit]
+        if has_more:
+            next_after = users[-1].id
+        else:
+            next_after = None
+        return UserPage(items=users, next_after=next_after)
 
     async def change_username(self, user: User, new_username: str, password: str) -> User:
         await self._ensure_password(user, password)

@@ -16,6 +16,11 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+class UserPage(BaseModel):
+    items: list[UserOut]
+    next_after: int | None
+
+
 class ChangeUsernameRequest(BaseModel):
     new_username: Username
     password: Password

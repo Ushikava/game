@@ -16,3 +16,7 @@ Custom script for Alembic:
 ./migrate status                    
 ./migrate check                     
 ./migrate                           
+
+
+Run serv: 
+- uv run uvicorn main:app --reload --reload-include .env --ws-max-size 65536

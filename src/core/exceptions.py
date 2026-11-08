@@ -7,10 +7,11 @@ from fastapi.responses import JSONResponse
 class AppError(Exception):
     status_code: ClassVar[int] = 500
     default_detail: ClassVar[str] = "Внутренняя ошибка сервера"
-    headers: ClassVar[dict[str, str] | None] = None
+    default_headers: ClassVar[dict[str, str] | None] = None
 
-    def __init__(self, detail: str | None = None):
+    def __init__(self, detail: str | None = None, headers: dict[str, str] | None = None):
         self.detail = detail or self.default_detail
+        self.headers = headers or self.default_headers
         super().__init__(self.detail)
 
 
@@ -22,7 +23,7 @@ class BadRequestError(AppError):
 class UnauthorizedError(AppError):
     status_code = 401
     default_detail = "Не авторизован"
-    headers: ClassVar[dict[str, str] | None] = {"WWW-Authenticate": "Bearer"}
+    default_headers: ClassVar[dict[str, str] | None] = {"WWW-Authenticate": "Bearer"}
 
 
 class ForbiddenError(AppError):
@@ -45,6 +46,17 @@ class ConflictError(AppError):
 class ServiceUnavailableError(AppError):
     status_code = 503
     default_detail = "Сервер перегружен, попробуйте позже"
+
+
+class TooManyRequestsError(AppError):
+    status_code = 429
+    default_detail = "Слишком много попыток, попробуйте позже"
+
+    def __init__(self, retry_after_seconds: int):
+        super().__init__(headers={"Retry-After": str(retry_after_seconds)})
+
+
+# ------------------------------
 
 
 async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:

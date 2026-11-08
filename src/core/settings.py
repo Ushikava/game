@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = Field(default=30, gt=0)
     password_hash_concurrency: int = Field(default=2, gt=0)
     password_hash_wait_seconds: float = Field(default=10, gt=0)
+    login_rate_limit: int = Field(default=5, gt=0)
+    login_rate_window_seconds: float = Field(default=60, gt=0)
+    register_rate_limit: int = Field(default=5, gt=0)
+    register_rate_window_seconds: float = Field(default=600, gt=0)
 
 
 settings = Settings()
