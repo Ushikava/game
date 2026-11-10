@@ -7,8 +7,8 @@ from pydantic import ValidationError
 
 from core.exceptions import UnauthorizedError
 from db.session import SessionFactory
-from infrastructure.connection_manager import Connection
-from models.game import AuthMessage, CloseCode, PlayerInfo
+from infrastructure.connection_manager import Connection, ConnectionManager
+from models.game import AuthMessage, CloseCode, MoveMessage, PlayerInfo
 from routers.dependencies import ConnectionManagerDep
 from services.auth import AuthService
 
@@ -44,7 +44,7 @@ async def ws_endpoint(websocket: WebSocket, manager: ConnectionManagerDep) -> No
             if raw is None:
                 _send_error(connection, "Ожидалось текстовое сообщение")
             else:
-                _handle_message(connection, raw)
+                _handle_message(connection, raw, manager)
     except _MessageTooBigError:
         await connection.close(CloseCode.MESSAGE_TOO_BIG, "Сообщение слишком большое")
     except WebSocketDisconnect:
@@ -92,7 +92,7 @@ async def _authenticate(websocket: WebSocket) -> PlayerInfo | None:
     return PlayerInfo(id=user.id, username=user.username)
 
 
-def _handle_message(connection: Connection, raw: str) -> None:
+def _handle_message(connection: Connection, raw: str, manager: ConnectionManager) -> None:
     try:
         message: Any = json.loads(raw)
     except json.JSONDecodeError:
@@ -101,6 +101,21 @@ def _handle_message(connection: Connection, raw: str) -> None:
     if not isinstance(message, dict) or not isinstance(message.get("type"), str):
         _send_error(connection, "Сообщение должно быть объектом с полем type")
         return
+    
+    if message["type"] == "move":
+        try:
+            new_move_position: MoveMessage = MoveMessage.model_validate(message)
+        except ValidationError:
+            _send_error(connection, "Некорректное движение")
+            return
+        manager.broadcast({
+            "type": "player_moved",
+            "id": connection.player.id,
+            "x": new_move_position.x,
+            "y": new_move_position.y
+        }, exclude=connection.player.id)
+        return
+
     _send_error(connection, "Неизвестный тип сообщения")
 
 

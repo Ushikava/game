@@ -21,3 +21,9 @@ class AuthMessage(BaseModel):
 class PlayerInfo(BaseModel):
     id: int
     username: str
+
+
+class MoveMessage(BaseModel):
+    type: Literal["move"]
+    x: float
+    y: float
