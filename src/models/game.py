@@ -25,5 +25,5 @@ class PlayerInfo(BaseModel):
 
 class MoveMessage(BaseModel):
     type: Literal["move"]
-    x: float
-    y: float
+    x: Annotated[float, Field(allow_inf_nan=False)]
+    y: Annotated[float, Field(allow_inf_nan=False)]

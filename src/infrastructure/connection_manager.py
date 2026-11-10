@@ -14,13 +14,20 @@ CLOSE_TIMEOUT_SECONDS = 2.0
 
 class Connection:
     def __init__(self, player: PlayerInfo, websocket: WebSocket, on_failure: Callable[["Connection"], None]) -> None:
-        self.player = player
-        self.websocket = websocket
-        self.closed = False
-        self._failed = False
+        self.player: PlayerInfo = player
+        self.websocket: WebSocket = websocket
+        self.position: tuple[float, float] | None = None
+        self.closed: bool = False
+        self._failed: bool = False
         self._on_failure = on_failure
         self._outbox: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=OUTBOX_LIMIT)
         self._sender = asyncio.create_task(self._send_loop())
+
+    def info(self) -> dict[str, Any]:
+        if self.position is None:
+            return {**self.player.model_dump(), "position": None}
+        x, y = self.position
+        return {**self.player.model_dump(), "position": {"x": x, "y": y}}
 
     def push(self, message: dict[str, Any]) -> None:
         if self.closed or self._failed:
@@ -86,7 +93,7 @@ class ConnectionManager:
         await connection.close(code, reason)
 
     def online(self) -> list[dict[str, Any]]:
-        return [connection.player.model_dump() for connection in self._connections.values()]
+        return [connection.info() for connection in self._connections.values()]
 
     def broadcast(self, message: dict[str, Any], exclude: int | None = None) -> None:
         for user_id, connection in list(self._connections.items()):

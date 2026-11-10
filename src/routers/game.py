@@ -108,6 +108,7 @@ def _handle_message(connection: Connection, raw: str, manager: ConnectionManager
         except ValidationError:
             _send_error(connection, "Некорректное движение")
             return
+        connection.position = (new_move_position.x, new_move_position.y)
         manager.broadcast({
             "type": "player_moved",
             "id": connection.player.id,
