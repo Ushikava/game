@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import Callable
 from contextlib import suppress
 from typing import Any
@@ -17,6 +18,8 @@ class Connection:
         self.player: PlayerInfo = player
         self.websocket: WebSocket = websocket
         self.position: tuple[float, float] | None = None
+        self.moved_at: float = time.monotonic()
+        self.move_budget: float = 0.0
         self.closed: bool = False
         self._failed: bool = False
         self._on_failure = on_failure

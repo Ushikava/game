@@ -10,6 +10,7 @@ from db.models import User
 from db.session import get_db
 from infrastructure.connection_manager import ConnectionManager
 from services.auth import AuthService
+from services.movement import MovementService
 from services.users import UserService
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -45,8 +46,13 @@ def get_user_service(session: DbSession, connections: ConnectionManagerDep) -> U
     return UserService(session, connections)
 
 
+def get_movement_service(connections: ConnectionManagerDep) -> MovementService:
+    return MovementService(connections)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+MovementServiceDep = Annotated[MovementService, Depends(get_movement_service)]
 
 
 async def get_current_user(credentials: BearerCredentials, auth_service: AuthServiceDep) -> User:

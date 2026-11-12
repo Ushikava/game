@@ -7,10 +7,11 @@ from pydantic import ValidationError
 
 from core.exceptions import UnauthorizedError
 from db.session import SessionFactory
-from infrastructure.connection_manager import Connection, ConnectionManager
+from infrastructure.connection_manager import Connection
 from models.game import AuthMessage, CloseCode, MoveMessage, PlayerInfo
-from routers.dependencies import ConnectionManagerDep
+from routers.dependencies import ConnectionManagerDep, MovementServiceDep
 from services.auth import AuthService
+from services.movement import MovementService
 
 AUTH_TIMEOUT_SECONDS = 5
 MAX_MESSAGE_LENGTH = 16 * 1024
@@ -28,7 +29,7 @@ async def get_ping() -> dict[str, str]:
 
 
 @router.websocket("/ws")
-async def ws_endpoint(websocket: WebSocket, manager: ConnectionManagerDep) -> None:
+async def ws_endpoint(websocket: WebSocket, manager: ConnectionManagerDep, movement: MovementServiceDep) -> None:
     await websocket.accept()
     player = await _authenticate(websocket)
     if player is None:
@@ -44,7 +45,7 @@ async def ws_endpoint(websocket: WebSocket, manager: ConnectionManagerDep) -> No
             if raw is None:
                 _send_error(connection, "Ожидалось текстовое сообщение")
             else:
-                _handle_message(connection, raw, manager)
+                _handle_message(connection, raw, movement)
     except _MessageTooBigError:
         await connection.close(CloseCode.MESSAGE_TOO_BIG, "Сообщение слишком большое")
     except WebSocketDisconnect:
@@ -92,7 +93,7 @@ async def _authenticate(websocket: WebSocket) -> PlayerInfo | None:
     return PlayerInfo(id=user.id, username=user.username)
 
 
-def _handle_message(connection: Connection, raw: str, manager: ConnectionManager) -> None:
+def _handle_message(connection: Connection, raw: str, movement: MovementService) -> None:
     try:
         message: Any = json.loads(raw)
     except json.JSONDecodeError:
@@ -108,13 +109,8 @@ def _handle_message(connection: Connection, raw: str, manager: ConnectionManager
         except ValidationError:
             _send_error(connection, "Некорректное движение")
             return
-        connection.position = (new_move_position.x, new_move_position.y)
-        manager.broadcast({
-            "type": "player_moved",
-            "id": connection.player.id,
-            "x": new_move_position.x,
-            "y": new_move_position.y
-        }, exclude=connection.player.id)
+
+        movement.move(connection, new_move_position)
         return
 
     _send_error(connection, "Неизвестный тип сообщения")
