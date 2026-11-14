@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from models.users import NewPassword, Password, Username
+from schemas.users import NewPassword, Password, Username
 
 RefreshTokenValue = Annotated[str, Field(min_length=1, max_length=64)]
 

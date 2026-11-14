@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,13 +13,6 @@ class UserRepository:
 
     async def get_by_username(self, username: str) -> User | None:
         return await self.session.scalar(select(User).where(User.username == username))
-
-    async def get_page(self, after: int | None, limit: int) -> Sequence[User]:
-        query = select(User).order_by(User.id).limit(limit)
-        if after is not None:
-            query = query.where(User.id > after)
-        result = await self.session.scalars(query)
-        return result.all()
 
     async def add(self, username: str, hashed_password: str) -> User:
         user = User(username=username, hashed_password=hashed_password)

@@ -1,28 +1,10 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, status
 
 from db.models import User
-from models.users import (
-    ChangePasswordRequest,
-    ChangeUsernameRequest,
-    DeleteAccountRequest,
-    UserOut,
-    UserPage,
-)
 from routers.dependencies import CurrentUser, UserServiceDep
+from schemas.users import ChangePasswordRequest, ChangeUsernameRequest, DeleteAccountRequest, UserOut
 
 router = APIRouter(prefix="/users", tags=["users"])
-
-
-@router.get("", response_model=UserPage)
-async def list_users(
-    _: CurrentUser,
-    user_service: UserServiceDep,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    after: Annotated[int | None, Query(ge=1)] = None,
-) -> UserPage:
-    return await user_service.get_users(after, limit)
 
 
 @router.get("/me", response_model=UserOut)

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, status
 
 from db.models import User
-from models.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenPair
-from models.users import UserOut
-from routers.dependencies import AuthServiceDep, limit_login, limit_register
+from routers.dependencies import AuthServiceDep, ClientIp, limit_register
+from schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenPair
+from schemas.users import UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -18,9 +18,9 @@ async def register(body: RegisterRequest, auth_service: AuthServiceDep) -> User:
     return await auth_service.register(body.username, body.password)
 
 
-@router.post("/login", dependencies=[Depends(limit_login)])
-async def login(body: LoginRequest, auth_service: AuthServiceDep) -> TokenPair:
-    return await auth_service.login(body.username, body.password)
+@router.post("/login")
+async def login(body: LoginRequest, ip: ClientIp, auth_service: AuthServiceDep) -> TokenPair:
+    return await auth_service.login(body.username, body.password, ip)
 
 
 @router.post("/refresh")

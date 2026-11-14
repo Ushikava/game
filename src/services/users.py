@@ -2,31 +2,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import ConflictError, ForbiddenError
+from core.rate_limit import AuthLimits, reserve
 from core.security import hash_password, verify_password
 from db.models import User
 from infrastructure.connection_manager import ConnectionManager
-from models.game import CloseCode
-from models.users import UserPage
 from repositories.refresh_tokens import RefreshTokenRepository
 from repositories.users import UserRepository
+from schemas.game import CloseCode
 
 
 class UserService:
-    def __init__(self, session: AsyncSession, connections: ConnectionManager):
+    def __init__(self, session: AsyncSession, connections: ConnectionManager, limits: AuthLimits):
         self.session = session
         self.connections = connections
+        self.limits = limits
         self.users = UserRepository(session)
         self.refresh_tokens = RefreshTokenRepository(session)
-
-    async def get_users(self, after: int | None, limit: int) -> UserPage:
-        users = await self.users.get_page(after=after, limit=limit + 1)
-        has_more: bool = len(users) > limit
-        users = users[:limit]
-        if has_more:
-            next_after = users[-1].id
-        else:
-            next_after = None
-        return UserPage(items=users, next_after=next_after)
 
     async def change_username(self, user: User, new_username: str, password: str) -> User:
         await self._ensure_password(user, password)
@@ -41,6 +32,7 @@ class UserService:
     async def change_password(self, user: User, current_password: str, new_password: str) -> None:
         await self._ensure_password(user, current_password)
         user.hashed_password = await hash_password(new_password)
+        user.token_version += 1
         await self.refresh_tokens.delete_all_for_user(user.id)
         await self.session.commit()
         await self.connections.kick(user.id, CloseCode.SESSION_REVOKED, "Пароль изменён")
@@ -53,6 +45,12 @@ class UserService:
         await self.connections.kick(user_id, CloseCode.SESSION_REVOKED, "Аккаунт удалён")
 
     async def _ensure_password(self, user: User, password: str) -> None:
-        is_valid, _ = await verify_password(password, user.hashed_password)
+        attempt = reserve((self.limits.password_confirm_per_user, str(user.id)))
+        try:
+            is_valid, _ = await verify_password(password, user.hashed_password)
+        except BaseException:
+            attempt.release()
+            raise
         if not is_valid:
             raise ForbiddenError("Неверный пароль")
+        attempt.release()
