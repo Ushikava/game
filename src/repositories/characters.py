@@ -25,8 +25,8 @@ class CharacterRepository:
         found = await self.session.scalar(select(Character.id).where(func.lower(Character.name) == name.lower()))
         return found is not None
 
-    async def add(self, user_id: int, slot: int, name: str, x: float, y: float) -> Character:
-        character = Character(user_id=user_id, slot=slot, name=name, x=x, y=y)
+    async def add(self, *, user_id: int, slot: int, name: str, x: float, y: float, health: int) -> Character:
+        character = Character(user_id=user_id, slot=slot, name=name, x=x, y=y, health=health)
         self.session.add(character)
         await self.session.flush()
         return character

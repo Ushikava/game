@@ -13,7 +13,7 @@ from infrastructure.ws_io import MessageTooBigError, receive_text
 from schemas.game import AuthMessage, CloseCode, PlayerInfo
 from services.auth import AuthService
 from services.autosave import save_final_position
-from services.characters import CharacterService
+from services.characters import CharacterService, max_health
 from services.game_messages import GameMessageHandler
 
 AUTH_TIMEOUT_SECONDS = 5
@@ -25,6 +25,8 @@ class WorldEntry:
     user_id: int
     player: PlayerInfo
     position: tuple[float, float]
+    health: int
+    max_health: int
 
 
 @dataclass(frozen=True)
@@ -97,10 +99,10 @@ class GameSession:
             )
         if character is None:
             raise NotFoundError("Персонаж")
-        return WorldEntry(user.id, PlayerInfo(id=character.id, name=character.name), (character.x, character.y))
+        return WorldEntry(user.id, PlayerInfo(id=character.id, name=character.name), (character.x, character.y), character.health, max_health(character))  # noqa: E501
 
     async def _play(self, websocket: WebSocket, entry: WorldEntry) -> None:
-        connection, replaced = await self.connections.connect(entry.user_id, entry.player, entry.position, websocket)
+        connection, replaced = await self.connections.connect(entry.user_id, entry.player, entry.position, entry.health, entry.max_health, websocket)  # noqa: E501
         inbound = TokenBucket(self.inbound_limit.messages_per_second, self.inbound_limit.burst)
         try:
             connection.push({"type": "welcome", "you": connection.info(), "online": self.connections.online()})

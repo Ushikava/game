@@ -19,6 +19,8 @@ class Connection:
         user_id: int,
         player: PlayerInfo,
         position: tuple[float, float],
+        health: int,
+        max_health: int,
         websocket: WebSocket,
         on_failure: Callable[["Connection"], None],
     ) -> None:
@@ -26,6 +28,8 @@ class Connection:
         self.player: PlayerInfo = player
         self.websocket: WebSocket = websocket
         self.position: tuple[float, float] = position
+        self.health: int = health
+        self.max_health: int = max_health
         self.moved_at: float = time.monotonic()
         self.move_budget: float = 0.0
         self.handed_over: bool = False
@@ -37,7 +41,7 @@ class Connection:
 
     def info(self) -> dict[str, Any]:
         x, y = self.position
-        return {**self.player.model_dump(), "position": {"x": x, "y": y}}
+        return {**self.player.model_dump(), "position": {"x": x, "y": y}, "health": self.health, "max_health": self.max_health}  # noqa: E501
 
     def push(self, message: dict[str, Any]) -> None:
         if self.closed or self._failed:
@@ -84,13 +88,14 @@ class ConnectionManager:
         self._tasks: set[asyncio.Task[None]] = set()
 
     async def connect(
-        self, user_id: int, player: PlayerInfo, position: tuple[float, float], websocket: WebSocket
+        self, user_id: int, player: PlayerInfo, position: tuple[float, float], health: int, max_health: int,  websocket: WebSocket  # noqa: E501
     ) -> tuple[Connection, bool]:
-        connection = Connection(user_id, player, position, websocket, self._on_failure)
+        connection = Connection(user_id, player, position, health, max_health, websocket, self._on_failure)
         previous = self._connections.get(user_id)
         same_character = previous is not None and previous.player.id == player.id
         if previous is not None and same_character:
             connection.position = previous.position
+            connection.health = previous.health
             previous.handed_over = True
         if previous is not None and not same_character:
             self._forget(previous)

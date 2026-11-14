@@ -11,6 +11,11 @@ from schemas.characters import MAX_CHARACTERS_PER_USER, CharacterList, Character
 from schemas.game import CloseCode
 
 START_POSITION = (21.0, 2.0)
+BASE_HEALTH = 1000
+
+
+def max_health(character: Character) -> int:
+    return BASE_HEALTH
 
 
 class CharacterService:
@@ -32,7 +37,9 @@ class CharacterService:
 
         x, y = START_POSITION
         try:
-            character = await self.characters.add(user.id, free_slots[0], name, x, y)
+            character = await self.characters.add(
+                user_id=user.id, slot=free_slots[0], name=name, x=x, y=y, health=BASE_HEALTH
+            )
             await self.session.commit()
         except IntegrityError as exc:
             await self.session.rollback()
